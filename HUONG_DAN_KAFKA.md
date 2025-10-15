@@ -204,6 +204,63 @@ ps aux | grep kafka
 ./bin/kafka-console-consumer.sh --topic test-topic --bootstrap-server localhost:9092 --from-beginning
 ```
 
+Chạy nhanh trên Windows (cmd.exe)
+
+- Lưu ý: dùng Command Prompt (cmd.exe), không dùng PowerShell để tránh lỗi redirect.
+
+1) Khởi động Kafka server (cửa sổ 1):
+```bat
+cd /d C:\Users\Laptop\Desktop\kafka\kafka-development
+bin\windows\kafka-server-start.bat config\server.properties
+```
+
+2) Tạo topic và chạy Consumer (cửa sổ 2):
+```bat
+cd /d C:\Users\Laptop\Desktop\kafka\kafka-development
+bin\windows\kafka-topics.bat --create --if-not-exists --topic test-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+bin\windows\kafka-console-consumer.bat --topic test-topic --bootstrap-server localhost:9092 --from-beginning
+```
+
+3) Chạy Producer (cửa sổ 3):
+```bat
+cd /d C:\Users\Laptop\Desktop\kafka\kafka-development
+bin\windows\kafka-console-producer.bat --topic test-topic --bootstrap-server localhost:9092
+```
+- Gõ mỗi dòng một thông điệp rồi Enter để gửi; xem cửa sổ Consumer nhận tin.
+
+Fallback chạy bằng Docker (nếu build/demo lỗi)
+
+- Yêu cầu: Docker Desktop đã mở và ở trạng thái Running.
+
+1) Khởi động Kafka 1 node bằng Docker Compose (cmd.exe):
+```bat
+cd /d C:\Users\Laptop\Desktop\kafka\kafka-development
+set IMAGE=apache/kafka:latest&& docker compose -f docker\examples\docker-compose-files\single-node\plaintext\docker-compose.yml up -d
+```
+
+2) Mở Consumer bên trong container:
+```bat
+start "Consumer" cmd /k docker exec -it broker /opt/kafka/bin/kafka-console-consumer.sh --topic test-topic --bootstrap-server localhost:9092 --from-beginning
+```
+
+3) Tạo topic và gửi tin nhắn (bên trong container):
+```bat
+docker exec broker /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic test-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+echo Xin chao tu Docker | docker exec -i broker /opt/kafka/bin/kafka-console-producer.sh --topic test-topic --bootstrap-server localhost:9092
+```
+
+4) Dừng stack khi hoàn tất:
+```bat
+docker compose -f C:\Users\Laptop\Desktop\kafka\kafka-development\docker\examples\docker-compose-files\single-node\plaintext\docker-compose.yml down
+```
+
+Chạy tất cả bằng 1 lệnh duy nhất (Docker, cmd.exe)
+
+- Lệnh này sẽ: bật stack 1-node, chờ ngắn, tạo topic, gửi 1 message, đọc 2 message rồi tự thoát.
+```bat
+cmd.exe /c "cd /d C:\Users\Laptop\Desktop\kafka\kafka-development && set IMAGE=apache/kafka:latest&& docker compose -f docker\examples\docker-compose-files\single-node\plaintext\docker-compose.yml up -d && timeout /t 5 >nul && docker exec broker /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic test-topic --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1 && echo Hello from one-liner | docker exec -i broker /opt/kafka/bin/kafka-console-producer.sh --topic test-topic --bootstrap-server localhost:9092 && docker exec broker /opt/kafka/bin/kafka-console-consumer.sh --topic test-topic --bootstrap-server localhost:9092 --from-beginning --max-messages 2 --timeout-ms 5000"
+```
+
 Kết luận
 
 Qua bài này, chúng ta đã học được những khái niệm cơ bản của hệ thống phân tán:
