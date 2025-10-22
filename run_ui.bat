@@ -1,11 +1,8 @@
 @echo off
 setlocal
 cd /d %~dp0
-
-rem Compile UI (requires JDK 17+)
-javac -encoding UTF-8 KafkaGui.java || goto :eof
-
-rem Run UI
-java KafkaGui
-
-
+docker compose up -d --build
+REM chờ các service sẵn sàng
+timeout /t 8 >nul
+start "" http://localhost:8080/index.php
+endlocal

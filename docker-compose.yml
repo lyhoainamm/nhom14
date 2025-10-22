@@ -1,0 +1,100 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: nhom14-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: nhom14_ui
+    ports: ["3307:3306"]
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./webapp/sql/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -proot || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    container_name: nhom14-zk
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports: ["2181:2181"]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    container_name: nhom14-kafka
+    depends_on: [zookeeper]
+    ports: ["9092:9092","29092:29092"]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.3
+    container_name: nhom14-schema
+    depends_on: [kafka]
+    ports: ["8081:8081"]
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
+  kafka-rest:
+    image: confluentinc/cp-kafka-rest:7.5.3
+    container_name: nhom14-kafka-rest
+    depends_on: [kafka, schema-registry]
+    ports: ["8082:8082"]
+    environment:
+      KAFKA_REST_HOST_NAME: kafka-rest
+      KAFKA_REST_LISTENERS: http://0.0.0.0:8082
+      KAFKA_REST_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      KAFKA_REST_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+
+  webapp:
+    build: ./webapp
+    container_name: nhom14-webapp
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka-rest:
+        condition: service_started
+    environment:
+      DB_HOST: mysql
+      DB_NAME: nhom14_ui
+      DB_USER: root
+      DB_PASS: root
+      KAFKA_REST_PROXY: http://kafka-rest:8082
+      KAFKA_DEFAULT_TOPIC: demo-topic
+      TOPIC_ORDER_VIEWED: order-viewed
+    ports: ["8080:80"]
+
+  java-consumer:
+    build: ./java-consumer
+    container_name: nhom14-consumer
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      BOOTSTRAP: kafka:9092
+      GROUP_ID: nhom14-webapp-consumer
+      TOPICS: order-viewed,demo-topic,order-created
+      JDBC_URL: jdbc:mysql://mysql:3306/nhom14_ui?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
+      JDBC_USER: root
+      JDBC_PASS: root
+    restart: unless-stopped
+
+volumes:
+  db_data:
